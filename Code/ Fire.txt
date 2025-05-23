@@ -1,0 +1,88 @@
+#include <SoftwareSerial.h>
+
+// Define SIM900A TX/RX to Arduino
+SoftwareSerial GSM(11, 12); 
+
+// List of phone numbers for alerts
+char *phone_numbers[] = {"+918310238560", "+919738952280"}; 
+int total_numbers = 2; // Total contacts
+
+// Fire detection sensor
+#define FIRE_SENSOR 3  
+
+void setup() {
+  Serial.begin(9600);  
+  GSM.begin(9600);    
+
+  pinMode(FIRE_SENSOR, INPUT_PULLUP); // Fire sensor or test button
+
+  Serial.println("Initializing SIM900A...");
+  initModule("AT", "OK", 1000);
+  initModule("AT+CMGF=1", "OK", 1000);  // Set SMS to Text Mode
+  initModule("AT+CSCS=\"GSM\"", "OK", 1000); // Set GSM character set
+  initModule("AT+CNMI=2,2,0,0,0", "OK", 1000); // New SMS indications
+}
+
+void loop() {
+  if (digitalRead(FIRE_SENSOR) == LOW) { // Fire detected
+    Serial.println("🔥 Fire detected! Sending Alerts...");
+
+    for (int i = 0; i < total_numbers; i++) {
+      sendSMS(phone_numbers[i], " Fire Alert! Immediate action required!");
+      delay(5000); // Wait before sending next SMS
+    }
+
+    for (int i = 0; i < total_numbers; i++) {
+      callUp(phone_numbers[i]);
+      delay(10000); // Wait before next call
+    }
+  }
+
+  delay(100);
+}
+
+void sendSMS(char *number, char *message) {
+  Serial.print("Sending SMS to: ");
+  Serial.println(number);
+  GSM.println("AT+CMGF=1"); // Text mode
+  delay(500);
+  GSM.print("AT+CMGS=\"");
+  GSM.print(number);
+  GSM.println("\"");
+  delay(500);
+  GSM.print(message);
+  delay(500);
+  GSM.write(26); // CTRL+Z to send
+  delay(5000);  
+  Serial.println("✅ SMS Sent!");
+}
+
+void callUp(char *number) {
+  Serial.print("📞 Calling: ");
+  Serial.println(number);
+  GSM.print("ATD");
+  GSM.print(number);
+  GSM.println(";");
+  delay(30000); // Call duration
+  GSM.println("ATH"); // Hang up
+  delay(1000);
+  Serial.println("📞 Call Ended.");
+}
+
+void initModule(String cmd, char *res, int timeout) {
+  while (1) {
+    Serial.println(cmd);
+    GSM.println(cmd);
+    delay(100);
+    while (GSM.available() > 0) {
+      if (GSM.find(res)) {
+        Serial.println("✔ OK");
+        delay(timeout);
+        return;
+      } else {
+        Serial.println("❌ Error, Retrying...");
+      }
+    }
+    delay(timeout);
+  }
+}
